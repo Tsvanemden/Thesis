@@ -1,0 +1,1 @@
+number	thomasName	sraName	batch	strainBackground	condition	bedgraph1	TvE_wt_1	wt_1	a	374	wt	-2	TvE_wt_2	wt_2	b	374	wt	-7	TvE_lem2_1	lem2_1	a	374	lem2	-8	TvE_lem2_2	lem2_2	b	374	lem2	-13	TvE_wt_3	wt_3	c	374	wt	-14	TvE_wt_4	wt_4	d	374	wt	-19	TvE_lem2_3	lem2_3	c	374	lem2	-20	TvE_lem2_4	lem2_4	d	374	lem2	-

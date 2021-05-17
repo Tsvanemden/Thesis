@@ -1,0 +1,148 @@
+
+configfile: "config.yaml"
+
+import pandas as pd
+
+sample_table = pd.read_table(config["runtable"], sep="\t")
+samples = list(sample_table["sraName"].unique())
+
+
+# everything that need network connection for
+localrules:
+
+rule all:
+	input:
+		expand("data/RSEM/UniqueOnly/{SRS}.genes.results", SRS=samples),
+		expand("data/RSEM/Random/{SRS}.genes.results", SRS=samples),
+		expand("data/RSEM/BestMap/{SRS}.genes.results", SRS=samples),
+		expand("data/RSEM/RandomFw/{SRS}.genes.results", SRS=samples)
+
+
+rule index:
+	input:
+		fasta="genomeFiles/ASM294v2.27.fasta",
+		gtf="genomeFiles/sortedStrandedAllLTRs.gtf"
+	output:
+		"data/index/Genome",
+		"data/index/genome.transcripts.fa",
+		"data/index/chrNameLength.txt"
+	shell:
+		"""
+		rsem-prepare-reference --gtf {input.gtf} --star {input.fasta} data/index/genome
+		"""
+
+
+rule STAR:
+	input:
+		file1="data/sraFiles/{SRS}.fastq.gz",
+		index="data/index/Genome"
+	output:
+		temp("data/SAMBAM/Random/{SRS}.Aligned.toTranscriptome.out.bam"),
+		temp("data/SAMBAM/Random/{SRS}.Aligned.sortedByCoord.out.bam")
+
+	threads: 16
+
+	shell:
+		"""
+		STAR --genomeDir data/index \
+		--runThreadN {threads} \
+		--readFilesIn <(gunzip -c {input.file1}) \
+		--sjdbGTFfile genomeFiles/sortedStrandedAllLTRs.gtf \
+		--outFileNamePrefix data/SAMBAM/Random/{wildcards.SRS}. \
+		--quantMode GeneCounts TranscriptomeSAM \
+		--outSAMtype BAM SortedByCoordinate \
+		--outSAMprimaryFlag AllBestScore \
+		--outSAMmultNmax 239
+		"""
+
+rule STARBestMap:
+	input:
+		file1="data/sraFiles/{SRS}.fastq.gz",
+		index="data/index/Genome"
+	output:
+		temp("data/SAMBAM/BestMap/{SRS}.Aligned.toTranscriptome.out.bam"),
+		temp("data/SAMBAM/BestMap/{SRS}.Aligned.sortedByCoord.out.bam")
+
+	threads: 16
+
+	shell:
+		"""
+		STAR --genomeDir data/index \
+		--runThreadN {threads} \
+		--readFilesIn <(gunzip -c {input.file1}) \
+		--sjdbGTFfile genomeFiles/sortedStrandedAllLTRs.gtf \
+		--outFileNamePrefix data/SAMBAM/BestMap/{wildcards.SRS}. \
+		--quantMode GeneCounts TranscriptomeSAM \
+		--outSAMtype BAM SortedByCoordinate \
+		--outSAMprimaryFlag AllBestScore \
+		--outSAMmultNmax 1
+		"""
+
+
+rule samtools:
+	input:
+		bamIn="data/SAMBAM/Random/{SRS}.Aligned.toTranscriptome.out.bam"
+	output:
+		bamOut=temp("data/SAMBAM/UniqueOnly/{SRS}.Aligned.toTranscriptome.out.bam")
+
+	threads: 15
+
+	shell:
+		"""
+		samtools view -q 255 -@ {threads} \
+		-o {output.bamOut} \
+		{input.bamIn}
+		"""
+
+
+rule RSEMUniqueOnly:
+	input:
+		alignedBam="data/SAMBAM/UniqueOnly/{SRS}.Aligned.toTranscriptome.out.bam",
+		index="data/index/Genome"
+	output:
+		"data/RSEM/UniqueOnly/{SRS}.genes.results",
+		temp("data/RSEM/UniqueOnly/{SRS}.transcript.bam")
+
+	threads: 16
+
+	shell:
+		"""
+		rsem-calculate-expression --strandedness reverse --bam {input.alignedBam} -p {threads} data/index/genome data/RSEM/UniqueOnly/{wildcards.SRS}
+		"""
+
+rule RSEMRandom:
+	input:
+		alignedBam="data/SAMBAM/Random/{SRS}.Aligned.toTranscriptome.out.bam",
+		index="data/index/Genome"
+	output:
+		"data/RSEM/Random/{SRS}.genes.results",
+		"data/RSEM/RandomFw/{SRS}.genes.results",
+		temp("data/RSEM/Random/{SRS}.transcript.bam")
+
+	threads: 16
+
+	shell:
+		"""
+		rsem-calculate-expression --strandedness reverse --bam {input.alignedBam} -p {threads} data/index/genome data/RSEM/Random/{wildcards.SRS}
+		rsem-calculate-expression --strandedness forward --bam {input.alignedBam} -p {threads} data/index/genome data/RSEM/RandomFw/{wildcards.SRS}
+		"""
+
+
+rule RSEMBestMap:
+	input:
+		alignedBam="data/SAMBAM/BestMap/{SRS}.Aligned.toTranscriptome.out.bam",
+		index="data/index/Genome"
+	output:
+		"data/RSEM/BestMap/{SRS}.genes.results",
+		temp("data/RSEM/BestMap/{SRS}.transcript.bam")
+
+	threads: 16
+
+	shell:
+		"""
+		rsem-calculate-expression --strandedness reverse --bam {input.alignedBam} -p {threads} data/index/genome data/RSEM/BestMap/{wildcards.SRS}
+		"""
+
+
+onsuccess:
+        shell("rm *.out")

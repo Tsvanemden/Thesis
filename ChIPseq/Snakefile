@@ -1,0 +1,39 @@
+
+import pandas as pd
+
+
+sample_table = pd.read_table(config["runtable"], sep="\t")
+numbers = list(sample_table["number"].unique())
+
+
+rule all:
+	input:
+		expand("bedgraph/{SRR}.BedGraph", SRR=numbers)
+
+rule bowtie2:
+	input:
+		"raw/{SRR}.fastq.gz"
+	output:
+		"BAM/{SRR}.out.bam"
+	shell:
+		"""
+		bowtie2 -x ./index/S_pombe -U ./raw/{wildcards.SRR}.fastq.gz | samtools view -b | samtools sort > ./BAM/{wildcards.SRR}.out.bam"
+		"""
+
+
+rule bedtools:
+	input:
+		"BAM/{SRR}.out.bam"
+	output:
+		"bedgraph/{SRR}.BedGraph"
+	shell:
+		"""
+		TmpScale=$(bc <<< "scale=6;1000000/$(samtools view -f 0 -c {input})")
+		bedtools genomecov -ibam {input} -d -split -scale $TmpScale  > bedgraph/{wildcards.SRR}.BedGraph
+		"""
+
+
+
+
+onsuccess:
+        shell("rm *.out")

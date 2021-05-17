@@ -1,0 +1,10 @@
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - snakemake-minimal =5.16
+  - python =3.6
+  - pandas
+  - bedtools =2.29.1
+  - bowtie2 =2.4.2
+ 
